@@ -36,14 +36,15 @@ describe("auto-version-switch", function() {
                 app = runningApp;
             }).
             then(function() {
-                return getAppVersion(app, "1.0", 0);
+                return getAppPage(app, "/version", expectedVersion("1.0"), 0);
             }).
             then(function(version) {
                 expect(version).toBe("1.0");
+
                 return switchAppVersion(app, "2.1");
             }).
             then(function() {
-                return getAppVersion(app, "2.1", 2000);
+                return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
             }).
             then(function(version) {
                 expect(version).toBe("2.1");
@@ -53,7 +54,7 @@ describe("auto-version-switch", function() {
 
     it("survives a bombardment of requests when switching, and without any http errors", function(done) {
         var app;
-        var MAGNITUDE_OF_BOMBARDMENTS = 50;
+        var MAGNITUDE_OF_BOMBARDMENTS = 100;
 
         runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
             then(function(runningApp) {
@@ -64,7 +65,7 @@ describe("auto-version-switch", function() {
             }).
             then(function() {
                 return Promise.all(_.range(0, MAGNITUDE_OF_BOMBARDMENTS).map(function () {
-                    return getAppVersion(app, undefined, 2000);
+                    return getAppPage(app, "/version", anyVersion, 0);
                 }));
             }).
             then(function(versions) {
@@ -72,6 +73,27 @@ describe("auto-version-switch", function() {
                 expect(versions.length).toBe(MAGNITUDE_OF_BOMBARDMENTS);
             }).
             then(done, fail(done));
+    });
+
+    it("should run the demo correctly", function(done) {
+            return runAppAndWait('./demo/runner.js', 'v1', 'version.txt').
+                then(function(runningApp) {
+                    app = runningApp;
+
+                    return getAppPage(app, "/", "Hello, world v1", 0);
+                }).
+                then(function(body) {
+                    expect(body).toBe("Hello, world v1");
+
+                    return switchAppVersion(app, "v2");
+                }).
+                then(function() {
+                    return getAppPage(app, "/", "Hello, world v2", 2000);
+                }).
+                then(function(body) {
+                    return expect(body).toBe("Hello, world v2");
+                }).
+                then(done, fail(done));
     });
 });
 
@@ -84,19 +106,23 @@ function fail(done) {
 }
 
 var APP_PORT = 8765;
+var SHOOT_TO_KILL_MARKER = "ZOMBIES_AHOY_SHOOT_TO_KILL";
 
-function runAppAndWait(appModule, firstVersion) {
-    var filename = os.tmpdir() + '/auto-version-switch-' + crypto.randomBytes(4).readUInt32LE(0);
+function runAppAndWait(appModule, firstVersion, versionFile) {
+    var filename = versionFile || os.tmpdir() + '/auto-version-switch-' + crypto.randomBytes(4).readUInt32LE(0);
     fs.writeFileSync(filename, firstVersion);
 
-    return killZombieProcesses(appModule).then(function () {
-        var app = child_process.fork(appModule, {env: {PORT: APP_PORT, VERSION_FILE: filename}});
+    return killZombieProcesses().
+        then(function () {
+            var app = child_process.fork(appModule, [SHOOT_TO_KILL_MARKER],
+                {
+                    env: {PORT: APP_PORT, VERSION_FILE: filename}
+                });
 
-        function wait(timeLeft) {
-            if (timeLeft <= 0)
-                return Promise.reject(new Error("waiting for app to live timed out"));
+            function wait(timeLeft) {
+                if (timeLeft <= 0)
+                    return Promise.reject(new Error("waiting for app to live timed out"));
 
-            try {
                 return rp("http://localhost:" + APP_PORT + "/alive").
                     catch(function () {
                         return Promise.delay(200).
@@ -104,20 +130,17 @@ function runAppAndWait(appModule, firstVersion) {
                                 return wait(timeLeft - 200);
                             });
                     });
-            } catch (err) {
-                return wait(timeLeft - 200);
             }
-        }
 
-        return wait(10000).then(function () {
-            return {app: app, baseUrl: "http://localhost:" + APP_PORT, versionFileName: filename};
+            return wait(10000).then(function () {
+                return {app: app, baseUrl: "http://localhost:" + APP_PORT, versionFileName: filename};
+            });
         });
-    });
 }
 
-function killZombieProcesses(appModule) {
+function killZombieProcesses() {
     return Promise.promisify(child_process.exec)(
-        'ps aux | grep "' + appModule + '" | grep -v "grep" | awk \'{print $2}\'', {}).
+        'ps aux | grep ' + SHOOT_TO_KILL_MARKER + ' | grep -v "grep" | awk \'{print $2}\'', {}).
         then(function(res) {
             var pidsToKill = res[0].split('\n').filter(function (pid) { return pid.length > 0 });
 
@@ -127,20 +150,32 @@ function killZombieProcesses(appModule) {
         });
 }
 
-function getAppVersion(app, expectedVersion, timeout) {
-    return rp(app.baseUrl + "/version").then(function(body) {
-        var version = JSON.parse(body).version;
+function expectedVersion(version) {
+    return function (body) {
+        var actualVersion = JSON.parse(body).version;
+        return actualVersion === version ? actualVersion : false;
+    }
+}
 
-        if (version !== expectedVersion) {
+function anyVersion(body) {
+    return JSON.parse(body).version;
+}
+
+function getAppPage(app, path, expectedBody, timeout) {
+    return rp(app.baseUrl + path).then(function(body) {
+        var body = body.toString().trim();
+
+        if (_.isFunction(expectedBody) && !expectedBody(body) ||
+            !_.isFunction(expectedBody) && body !== expectedBody) {
             if (timeout <= 0)
-                return version;
+                return _.isFunction(expectedBody) ? expectedBody(body) : body;
             else
                 return Promise.delay(200).then(function() {
-                    return getAppVersion(app, expectedVersion, timeout - 200);
+                    return getAppPage(app, path, expectedBody, timeout - 200);
                 });
         }
         else
-            return version;
+            return _.isFunction(expectedBody) ? expectedBody(body) : body;
     });
 }
 

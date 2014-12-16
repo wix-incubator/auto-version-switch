@@ -9,7 +9,7 @@ exports.run = function(switchVersionIfNeededFunc, version) {
             res.end("Hello, world v2")
         });
     }).listen(process.env.PORT || 3000);
-}
+};
 
 // optional - ensure app.js runs as a standalone module
 if (require.main == module) {
