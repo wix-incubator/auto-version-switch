@@ -9,6 +9,8 @@ How do I enable it in my app?
 Let's say you have an app.js that runs a web server, e.g.
 
 ```javascript
+var http = require('http');
+
 http.createServer(function (req, res) {
     res.writeHead(200);
     res.end("Hello, world v1")
@@ -16,7 +18,7 @@ http.createServer(function (req, res) {
 ```
 
 Doing `node app.js` runs the app nicely. But in production you would want to keep multiple versions of the app in
-different folders, and switch between them as possible, e.g. a folder structure like this:
+different folders, and switch between them as needed, e.g. a folder structure like this:
 
 ```
 v1/
@@ -34,22 +36,23 @@ any loss of connectivity.
 `auto-version-switch` enables this scenario, along with others, by adding a small js file that runs (and re-runs) the
  correct version of the app, taking care that no loss of connectivity ensues due to the version switch.
 
- In the above example, you just need to create a `runner` with the following code:
+ For the above example, you just need to create a `runner.js` with the following code:
 
  ```javascript
 require('auto-version-switch')(run, fetchExpectedVersion);
-var fs = require('fs');
 
 function run(version, switchVersionIfNeededFunc) {
-    require(version + '/app.js').run(switchVersionIfNeededFunc);
+    require('./' + version + '/app.js').run(switchVersionIfNeededFunc);
 }
 
 function fetchExpectedVersion(callback) {
+    var fs = require('fs');
+
     fs.readFile('version.txt', function (err, content) {
         if (err)
             callback(err);
 
-        callback(null, content.toString());
+        callback(null, content.toString().trim());
     });
 }
  ```
@@ -57,6 +60,8 @@ function fetchExpectedVersion(callback) {
 And slightly modify `app.js` to use `switchVersionIfNeededFunc`:
 
 ```javascript
+var http = require('http');
+
 exports.run = function(switchVersionIfNeededFunc, version) {
     http.createServer(function (req, res) {
         switchVersionIfNeededFunc(function (err) {
@@ -65,7 +70,7 @@ exports.run = function(switchVersionIfNeededFunc, version) {
             res.writeHead(200);
             res.end("Hello, world v1")
         });
-    }).listen(process.env.PORT);
+    }).listen(process.env.PORT || 3000);
 }
 
 // optional - ensure app.js runs as a standalone module
@@ -76,10 +81,10 @@ if (require.main == module) {
 }
 ```
 
-This example can be found in the `demo` folder of the module, and can be run using `npm demo`. Try running the demo,
+This example can be found in the `demo` folder of the module, and can be run using `npm run demo`. Try running the demo,
 using following these steps:
 
-1. Run the demo using `npm demo`.
+1. Run the demo using `npm run demo`.
 2. Browse to http://localhost:300 and view the "Hello world v1".
 3. Change `version.txt` in the demo folder to be "v2".
 4. Browse to http://localhost:300 and view the "Hello world v2". It may not be immediate, as you may

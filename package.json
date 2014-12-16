@@ -4,7 +4,8 @@
   "description": "Automatically switch between different versions of same app",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/.bin/grunt test"
+    "test": "node_modules/.bin/grunt test",
+    "demo": "cd demo && node runner.js"
   },
   "repository": {
     "type": "git",
