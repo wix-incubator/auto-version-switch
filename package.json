@@ -1,6 +1,6 @@
 {
   "name": "auto-version-switch",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "Automatically switch between different versions of same app",
   "main": "index.js",
   "scripts": {
@@ -20,7 +20,7 @@
     "dynamic"
   ],
   "author": "Gil Tayar",
-  "license": "Apache",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/wix/auto-version-switch/issues"
   },
