@@ -4,10 +4,31 @@ var Promise = require('Bluebird');
 var fs = require('fs');
 var os = require('os');
 var crypto = require('crypto');
+var _ = require('lodash');
 
 Promise.promisifyAll(fs);
 
 describe("auto-version-switch", function() {
+
+    beforeAll(function() {
+        jasmine.addMatchers({
+            toBeOneOf: function (util, customEqualityTesters) {
+                return {
+                    compare: function(collection, setOfValues) {
+                        var result = _.every(collection,
+                            function(v) {return _.some(setOfValues,
+                                function(sov) {return util.equals(v, sov, customEqualityTesters)})});
+
+                        if (result)
+                            return {pass: result, message: ""};
+                        else
+                            return {pass: result, message: "collection " + collection + " contains some values that are not part of " + setOfValues};
+                    }
+                }
+            }
+        });
+    });
+
     it("switches a version", function (done) {
         var app;
         runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
@@ -19,13 +40,36 @@ describe("auto-version-switch", function() {
             }).
             then(function(version) {
                 expect(version).toBe("1.0");
-                return switchAppVersion(app, "2.1")
+                return switchAppVersion(app, "2.1");
             }).
             then(function() {
                 return getAppVersion(app, "2.1", 2000);
             }).
             then(function(version) {
                 expect(version).toBe("2.1");
+            }).
+            then(done, fail(done));
+    });
+
+    it("survives a bombardment of requests when switching, and without any http errors", function(done) {
+        var app;
+        var MAGNITUDE_OF_BOMBARDMENTS = 50;
+
+        runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
+            then(function(runningApp) {
+                app = runningApp;
+            }).
+            then(function() {
+                return switchAppVersion(app, "2.2");
+            }).
+            then(function() {
+                return Promise.all(_.range(0, MAGNITUDE_OF_BOMBARDMENTS).map(function () {
+                    return getAppVersion(app, undefined, 2000);
+                }));
+            }).
+            then(function(versions) {
+                expect(versions).toBeOneOf(["1.0", "2.2"]);
+                expect(versions.length).toBe(MAGNITUDE_OF_BOMBARDMENTS);
             }).
             then(done, fail(done));
     });

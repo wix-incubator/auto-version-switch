@@ -5,8 +5,12 @@ function run(version, switchVersionIfNeeded) {
 
     var server = http.createServer(function (req, res) {
         switchVersionIfNeeded(function (err) {
-            if (err)
+            if (err) {
                 console.error(err);
+                res.writeHead(500);
+                res.end("switch callback failed: " + err);
+            }
+
             if (req.url == '/alive') {
                 res.writeHead(200, {'Content-Type': 'text/plain'});
                 res.end('alive');
