@@ -62,7 +62,7 @@ And slightly modify `app.js` to use `switchVersionIfNeededFunc`:
 ```javascript
 var http = require('http');
 
-exports.run = function(switchVersionIfNeededFunc, version) {
+exports.run = function(version, switchVersionIfNeededFunc) {
     http.createServer(function (req, res) {
         switchVersionIfNeededFunc(function (err) {
             if (err)
@@ -97,11 +97,12 @@ Reference
 
 The module is a single function, which accepts two functions (some would call them _strategies_):
 
-* `fetchExpectedVersion`: a function you supply that runs your application.
+* `run(version, switchVersionIfNeededFunc)`: a function you supply that runs your application.
 * `fetchExpectedVersion(callback)`: a function you supply that returns the version identifier that is expected to run.
 
-### `fetchExpectedVersion`
-This function, which you supply, should run the app. It accepts one parameter:
+### `run(switchVersionIfNeededFunc, version)`
+This function, which you supply, should run the app. It accepts two parameters:
+* `version`. The version that should run.
 * `switchVersionIfNeededFunc(callback)`. This function should be called by your app from time to time.
   It will switch versions of the app if it finds that the current version of the app
   is different than the version it gets by calling `fetchExpectedVersion`. If it isn't, it
@@ -110,8 +111,6 @@ This function, which you supply, should run the app. It accepts one parameter:
   request is still handled. If there was an error, the callback
   will be called with an error, otherwise it will be called with undefined. Note that even if the function returned an
   error, you can continue with your app, as it may be a temporary failure.
-* `version`. The current version that is running.
-You probably do not need this parameter, and it is there for informative purposes only.
 
 ### `fetchExpectedVersion(callback)`
 This function, which you supply, should call the callback with the expected version. The callback signature

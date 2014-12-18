@@ -95,6 +95,30 @@ describe("auto-version-switch", function() {
                 }).
                 then(done, fail(done));
     });
+
+    it("should fail nicely when runner throws an exception", function(done) {
+        return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 0).
+            then(function(runningApp) {
+                app = runningApp;
+
+                return waitForDead(app, 2000).then(function(isKilled) {
+                    expect(isKilled).toBe(true);
+                    done();
+                }, fail(done));
+            });
+    });
+
+    it("should fail nicely when first call to fetchExpectedVersion callbacks an error", function(done) {
+        return runAppAndWait('./tests/test-apps/fetchExpectedVersion-throws-exception.js', 'v1', undefined, 0).
+            then(function(runningApp) {
+                app = runningApp;
+
+                return waitForDead(app, 2000).then(function(isKilled) {
+                    expect(isKilled).toBe(true);
+                    done();
+                }, fail(done));
+            });
+    });
 });
 
 function fail(done) {
@@ -108,7 +132,7 @@ function fail(done) {
 var APP_PORT = 8765;
 var SHOOT_TO_KILL_MARKER = "ZOMBIES_AHOY_SHOOT_TO_KILL";
 
-function runAppAndWait(appModule, firstVersion, versionFile) {
+function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout) {
     var filename = versionFile || os.tmpdir() + '/auto-version-switch-' + crypto.randomBytes(4).readUInt32LE(0);
     fs.writeFileSync(filename, firstVersion);
 
@@ -132,7 +156,7 @@ function runAppAndWait(appModule, firstVersion, versionFile) {
                     });
             }
 
-            return wait(10000).then(function () {
+            return (waitTimeout === 0 ? Promise.resolve() : wait(waitTimeout || 10000)).then(function () {
                 return {app: app, baseUrl: "http://localhost:" + APP_PORT, versionFileName: filename};
             });
         });
@@ -163,12 +187,12 @@ function anyVersion(body) {
 
 function getAppPage(app, path, expectedBody, timeout) {
     return rp(app.baseUrl + path).then(function(body) {
-        var body = body.toString().trim();
+        var bodyString = body.toString().trim();
 
         if (_.isFunction(expectedBody) && !expectedBody(body) ||
-            !_.isFunction(expectedBody) && body !== expectedBody) {
+            !_.isFunction(expectedBody) && bodyString !== expectedBody) {
             if (timeout <= 0)
-                return _.isFunction(expectedBody) ? expectedBody(body) : body;
+                return _.isFunction(expectedBody) ? expectedBody(bodyString) : bodyString;
             else
                 return Promise.delay(200).then(function() {
                     return getAppPage(app, path, expectedBody, timeout - 200);
@@ -183,3 +207,18 @@ function switchAppVersion(app, newVersion) {
     return fs.writeFile(app.versionFileName, newVersion);
 }
 
+function waitForDead(app, timeLeft) {
+    if (app.isKilled === undefined)
+        app.app.on('exit', function() {
+            app.isKilled = true;
+        });
+    if (app.isKilled)
+        return Promise.resolve(true);
+    else
+        if (timeLeft <= 0)
+            return Promise.resolve(false);
+        else
+            return Promise.delay(200).then(function() {
+                return waitForDead(app, timeLeft - 200);
+            });
+}
