@@ -65,7 +65,7 @@ exports.run = function(version, switchVersionIfNeededFunc) {
             if (err)
                 console.error(err);
             res.writeHead(200);
-            res.end("Hello world v1")
+            res.end("Hello, world v1")
         });
     }).listen(process.env.PORT || 3000);
 }
@@ -81,9 +81,9 @@ if (require.main == module) {
 This example can be found in the `demo` folder of the module. Follow these steps to run the demo:
 
 1. Execute `npm run demo`.
-2. Browse to http://localhost:300 and view "Hello world v1".
+2. Browse to http://localhost:300 and view "Hello, world v1".
 3. Change `version.txt` in the `demo` folder to be "v2".
-4. Browse to http://localhost:300 and view "Hello world v2". You may need to refresh two or three times before seeing the version change. Remember, no loss of connectivity means that the old app may be running a little while longer.
+4. Browse to http://localhost:300 and view "Hello, world v2". You may need to refresh two or three times before seeing the version change. Remember, no loss of connectivity means that the old app may be running a little while longer.
 
 
 Reference
