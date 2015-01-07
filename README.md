@@ -110,7 +110,8 @@ This function, which you supply, should run the app. It accepts two parameters:
   will be called with an error; otherwise, it will be called with undefined. Even if the function returned an
   error, you can continue with your app, because it may be a temporary failure.
 * `options`. An object of options. The options supported:
-  * `iisNodeMode`. If `true`, will assume it is running under iisNode and use the iisNode mechanism for auto-version-switching.
+  * `iisNodeMode`. If `true`, will assume it is running under iisNode and use the iisNode mechanism for auto-version-switching.  
+  An alternative to this option is to set the environment variable AUTO_VERSION_SWITCH_IISNODE_MODE to 'true'
 
 ### `fetchExpectedVersion(callback)`
 This function, which you supply, should call the callback with the expected version. This uses the standard node callback signature:
