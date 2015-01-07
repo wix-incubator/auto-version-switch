@@ -3,6 +3,7 @@ var rp = require('request-promise');
 var Promise = require('Bluebird');
 var fs = require('fs');
 var os = require('os');
+var net = require('net');
 var crypto = require('crypto');
 var _ = require('lodash');
 
@@ -49,7 +50,9 @@ describe("auto-version-switch", function() {
             then(function(version) {
                 expect(version).toBe("2.1");
             }).
-            then(done, fail(done));
+            then(function() {
+                app.recycleListenerServer.close(done)
+            }, fail(done));
     });
 
     it("survives a bombardment of requests when switching, and without any http errors", function(done) {
@@ -72,7 +75,9 @@ describe("auto-version-switch", function() {
                 expect(versions).toBeOneOf(["1.0", "2.2"]);
                 expect(versions.length).toBe(MAGNITUDE_OF_BOMBARDMENTS);
             }).
-            then(done, fail(done));
+            then(function() {
+                app.recycleListenerServer.close(done)
+            }, fail(done));
     });
 
     it("should run the demo correctly", function(done) {
@@ -93,7 +98,9 @@ describe("auto-version-switch", function() {
                 then(function(body) {
                     return expect(body).toBe("Hello, world v2");
                 }).
-                then(done, fail(done));
+                then(function() {
+                    app.recycleListenerServer.close(done)
+                }, fail(done));
     });
 
     it("should fail nicely when runner throws an exception", function(done) {
@@ -103,7 +110,8 @@ describe("auto-version-switch", function() {
 
                 return waitForDead(app, 2000).then(function(isKilled) {
                     expect(isKilled).toBe(true);
-                    done();
+                    if (app)
+                        app.recycleListenerServer.close(done)
                 }, fail(done));
             });
     });
@@ -115,10 +123,37 @@ describe("auto-version-switch", function() {
 
                 return waitForDead(app, 2000).then(function(isKilled) {
                     expect(isKilled).toBe(true);
-                    done();
+                    app.recycleListenerServer.close(done)
                 }, fail(done));
             });
     });
+
+    describe("iisnode mode", function() {
+        it("should switch an app", function(done) {
+            var app;
+            runAppAndWait('./tests/test-apps/app-which-switches-iisnode-mode', '1.0').
+                then(function(runningApp) {
+                    app = runningApp;
+                }).
+                then(function() {
+                    return getAppPage(app, "/version", expectedVersion("1.0"), 0);
+                }).
+                then(function(version) {
+                    expect(version).toBe("1.0");
+
+                    return switchAppVersion(app, "2.1");
+                }).
+                then(function() {
+                    return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
+                }).
+                then(function(version) {
+                    expect(version).toBe("2.1");
+                }).
+                then(function() {
+                    app.recycleListenerServer.close(done)
+                }, fail(done));
+        })
+    })
 });
 
 function fail(done) {
@@ -136,12 +171,22 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout) {
     var filename = versionFile || os.tmpdir() + '/auto-version-switch-' + crypto.randomBytes(4).readUInt32LE(0);
     fs.writeFileSync(filename, firstVersion);
 
+
     return killZombieProcesses().
         then(function () {
-            var app = child_process.fork(appModule, [SHOOT_TO_KILL_MARKER],
-                {
-                    env: {PORT: APP_PORT, VERSION_FILE: filename}
-                });
+            var app;
+            function createApp() {
+                app = child_process.fork(appModule, [SHOOT_TO_KILL_MARKER],
+                    {
+                        env: {PORT: APP_PORT, VERSION_FILE: filename, IISNODE_CONTROL_PIPE: 9673}
+                    });
+            }
+            var recycleListenerServer = setupMockOfIisNodeRecycleListenerSocket(9673, function() {
+                app.kill();
+                createApp();
+            });
+
+            createApp();
 
             function wait(timeLeft) {
                 if (timeLeft <= 0)
@@ -157,9 +202,32 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout) {
             }
 
             return (waitTimeout === 0 ? Promise.resolve() : wait(waitTimeout || 10000)).then(function () {
-                return {app: app, baseUrl: "http://localhost:" + APP_PORT, versionFileName: filename};
+                return {
+                    app: app,
+                    baseUrl: "http://localhost:" + APP_PORT,
+                    versionFileName: filename,
+                    recycleListenerServer: recycleListenerServer
+                };
             });
         });
+}
+
+function setupMockOfIisNodeRecycleListenerSocket(port, recycleChildProcessCallback) {
+    var server = net.createServer(function(socket) {
+        socket.on('data', function(data) {
+            if (data.toString() === 'recycle') {
+                recycleChildProcessCallback();
+            }
+            else {
+                console.error("received something other than 'recycle': ", data.toString());
+            }
+        })
+    });
+
+    server.listen(port);
+
+
+    return server;
 }
 
 function killZombieProcesses() {
