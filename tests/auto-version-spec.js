@@ -132,10 +132,12 @@ describe("auto-version-switch", function () {
     var app;
 
     afterEach(function (done) {
-      expect(app).toBeTruthy()
-      expect(app.hasRecycledApp).toBe(true);
-      app.recycleListenerServer.close(done)
-      app = null;
+      if (app) {
+        app.recycleListenerServer.close(done)
+        app = null;
+      }
+      else
+        done();
     });
 
     it("should switch an app when option.iisNodeMode is true", function (done) {
@@ -155,6 +157,7 @@ describe("auto-version-switch", function () {
           return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
         }).
         then(function (version) {
+          expect(app.hasRecycledApp).toBe(true);
           expect(version).toBe("2.1");
         }).
         then(done, fail(done));
@@ -177,10 +180,23 @@ describe("auto-version-switch", function () {
           return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
         }).
         then(function (version) {
+          expect(app.hasRecycledApp).toBe(true);
           expect(version).toBe("2.1");
         }).
         then(done, fail(done));
-    })
+    });
+
+    it("should fail nicely when runner throws an exception", function (done) {
+      return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 1000, true, true).
+        then(function (runningApp) {
+          app = runningApp;
+
+          return waitForDead(app, 500).then(function (isKilled) {
+            expect(isKilled).toBe(true);
+            done();
+          }, fail(done));
+        }, done);
+    });
   })
 });
 
@@ -207,7 +223,7 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
         versionFileName: filename,
         recycleListenerServer: undefined,
         hasRecycledApp: false
-      }
+      };
 
       function createApp() {
         return child_process.fork(appModule, [SHOOT_TO_KILL_MARKER],
@@ -229,10 +245,16 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
         }) : null;
 
       ret.app = createApp();
+      ret.app.on('exit', function () {
+
+        ret.isKilled = true;
+      });
 
       function wait(timeLeft) {
-        if (timeLeft <= 0)
+        if (timeLeft <= 0) {
+          ret.recycleListenerServer.close();
           return Promise.reject(new Error("waiting for app to live timed out"));
+        }
 
         return rp("http://localhost:" + APP_PORT + "/alive").
           catch(function () {
@@ -315,10 +337,6 @@ function switchAppVersion(app, newVersion) {
 }
 
 function waitForDead(app, timeLeft) {
-  if (app.isKilled === undefined)
-    app.app.on('exit', function () {
-      app.isKilled = true;
-    });
   if (app.isKilled)
     return Promise.resolve(true);
   else if (timeLeft <= 0)
