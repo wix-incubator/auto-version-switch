@@ -6,40 +6,19 @@ var os = require('os');
 var net = require('net');
 var crypto = require('crypto');
 var _ = require('lodash');
+var chai = require('chai');
+var expect = chai.expect;
 
 Promise.promisifyAll(fs);
 
 describe("auto-version-switch", function () {
 
-  beforeAll(function () {
-    jasmine.addMatchers({
-      toBeOneOf: function (util, customEqualityTesters) {
-        return {
-          compare: function (collection, setOfValues) {
-            var result = _.every(collection,
-              function (v) {
-                return _.some(setOfValues,
-                  function (sov) {
-                    return util.equals(v, sov, customEqualityTesters)
-                  })
-              });
+  this.timeout(20000);
+  this.slow(1000);
 
-            if (result)
-              return {pass: result, message: ""};
-            else
-              return {
-                pass: result,
-                message: "collection " + collection + " contains some values that are not part of " + setOfValues
-              };
-          }
-        }
-      }
-    });
-  });
-
-  it("switches a version", function (done) {
+  it("switches a version", function () {
     var app;
-    runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
+    return runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
       then(function (runningApp) {
         app = runningApp;
       }).
@@ -47,7 +26,7 @@ describe("auto-version-switch", function () {
         return getAppPage(app, "/version", expectedVersion("1.0"), 0);
       }).
       then(function (version) {
-        expect(version).toBe("1.0");
+        expect(version).to.be.equal("1.0");
 
         return switchAppVersion(app, "2.1");
       }).
@@ -55,17 +34,15 @@ describe("auto-version-switch", function () {
         return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
       }).
       then(function (version) {
-        expect(version).toBe("2.1");
-      }).
-      then(done, fail(done));
+        expect(version).to.be.equal("2.1");
+      });
   });
 
-  // todo: this test started to fail (maybe on node 4.x only) - requires investigation
-  xit("survives a bombardment of requests when switching, and without any http errors", function (done) {
+  it.skip("survives a bombardment of requests when switching, and without any http errors", function () {
     var app;
     var MAGNITUDE_OF_BOMBARDMENTS = 100;
 
-    runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
+    return runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
       then(function (runningApp) {
         app = runningApp;
       }).
@@ -78,13 +55,13 @@ describe("auto-version-switch", function () {
         }));
       }).
       then(function (versions) {
-        expect(versions).toBeOneOf(["1.0", "2.2"]);
-        expect(versions.length).toBe(MAGNITUDE_OF_BOMBARDMENTS);
-      }).
-      then(done, fail(done));
+        expect(["1.0", "2.2"]).to.include.members(versions);
+        expect(versions.length).to.be.equal(MAGNITUDE_OF_BOMBARDMENTS);
+      });
   });
 
-  it("should run the demo correctly", function (done) {
+  it("should run the demo correctly", function () {
+    var app;
     return runAppAndWait('./demo/runner.js', 'v1', 'version.txt').
       then(function (runningApp) {
         app = runningApp;
@@ -92,7 +69,7 @@ describe("auto-version-switch", function () {
         return getAppPage(app, "/", "Hello, world v1", 0);
       }).
       then(function (body) {
-        expect(body).toBe("Hello, world v1");
+        expect(body).to.be.equal("Hello, world v1");
 
         return switchAppVersion(app, "v2");
       }).
@@ -100,30 +77,26 @@ describe("auto-version-switch", function () {
         return getAppPage(app, "/", "Hello, world v2", 2000);
       }).
       then(function (body) {
-        return expect(body).toBe("Hello, world v2");
-      }).
-      then(done, fail(done));
+        return expect(body).to.be.equal("Hello, world v2");
+      });
   });
 
   it("should fail nicely when runner throws an exception", function (done) {
     return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 0).
       then(function (runningApp) {
-        app = runningApp;
-
-        return waitForDead(app, 2000).then(function (isKilled) {
-          expect(isKilled).toBe(true);
-          done();
-        }, fail(done));
+        return waitForDead(runningApp, 2000)
+          .then(function (isKilled) {
+            expect(isKilled).to.be.true;
+            done();
+          }, fail(done));
       });
   });
 
   it("should fail nicely when first call to fetchExpectedVersion callbacks an error", function (done) {
     return runAppAndWait('./tests/test-apps/fetchExpectedVersion-throws-exception.js', 'v1', undefined, 0).
       then(function (runningApp) {
-        app = runningApp;
-
-        return waitForDead(app, 2000).then(function (isKilled) {
-          expect(isKilled).toBe(true);
+        return waitForDead(runningApp, 2000).then(function (isKilled) {
+          expect(isKilled).to.be.true;
           done();
         }, fail(done));
       });
@@ -134,15 +107,15 @@ describe("auto-version-switch", function () {
 
     afterEach(function (done) {
       if (app) {
-        app.recycleListenerServer.close(done)
+        app.recycleListenerServer.close(done);
         app = null;
       }
       else
         done();
     });
 
-    it("should switch an app when option.iisNodeMode is true", function (done) {
-      runAppAndWait('./tests/test-apps/app-which-switches-iisnode-mode', '1.0', undefined, undefined, true, false).
+    it("should switch an app when option.iisNodeMode is true", function () {
+      return runAppAndWait('./tests/test-apps/app-which-switches-iisnode-mode', '1.0', undefined, undefined, true, false).
         then(function (runningApp) {
           app = runningApp;
         }).
@@ -150,7 +123,7 @@ describe("auto-version-switch", function () {
           return getAppPage(app, "/version", expectedVersion("1.0"), 0);
         }).
         then(function (version) {
-          expect(version).toBe("1.0");
+          expect(version).to.be.equal("1.0");
 
           return switchAppVersion(app, "2.1");
         }).
@@ -158,14 +131,13 @@ describe("auto-version-switch", function () {
           return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
         }).
         then(function (version) {
-          expect(app.hasRecycledApp).toBe(true);
-          expect(version).toBe("2.1");
-        }).
-        then(done, fail(done));
+          expect(app.hasRecycledApp).to.be.true;
+          expect(version).to.be.equal("2.1");
+        });
     });
 
-    it("should switch an app when environment variable for iisnode mode is true", function (done) {
-      runAppAndWait('./tests/test-apps/app-which-switches', '1.0', undefined, undefined, true, true).
+    it("should switch an app when environment variable for iisnode mode is true", function () {
+      return runAppAndWait('./tests/test-apps/app-which-switches', '1.0', undefined, undefined, true, true).
         then(function (runningApp) {
           app = runningApp;
         }).
@@ -173,7 +145,7 @@ describe("auto-version-switch", function () {
           return getAppPage(app, "/version", expectedVersion("1.0"), 0);
         }).
         then(function (version) {
-          expect(version).toBe("1.0");
+          expect(version).to.be.equal("1.0");
 
           return switchAppVersion(app, "2.1");
         }).
@@ -181,30 +153,28 @@ describe("auto-version-switch", function () {
           return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
         }).
         then(function (version) {
-          expect(app.hasRecycledApp).toBe(true);
-          expect(version).toBe("2.1");
-        }).
-        then(done, fail(done));
+          expect(app.hasRecycledApp).to.be.true;
+          expect(version).to.be.equal("2.1");
+        });
     });
 
     it("should fail nicely when runner throws an exception", function (done) {
-      return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 1000, true, true).
-        then(function (runningApp) {
-          app = runningApp;
-
-          return waitForDead(app, 500).then(function (isKilled) {
-            expect(isKilled).toBe(true);
-            done();
-          }, fail(done));
-        }, done);
+      return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 0, true, true)
+        .then(function (runningApp) {
+          return waitForDead(runningApp, 2000)
+            .then(function (isKilled) {
+              expect(isKilled).to.be.true;
+              done();
+            }, fail(done));
+        });
     });
   })
 });
 
 function fail(done) {
   return function (err) {
-    console.error(err.stack);
-    expect(err).toBe(undefined);
+    console.error('TEST ERROR:', err, err && err.stack ? err.stack : '');
+    expect(err).to.be.undefined;
     done();
   }
 }
@@ -230,6 +200,7 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
         return child_process.fork(appModule, [SHOOT_TO_KILL_MARKER],
           {
             env: {
+              DEBUG: "debug:*",
               PORT: APP_PORT,
               VERSION_FILE: filename,
               IISNODE_CONTROL_PIPE: supportIisNodeMode ? 9673 : 0,
@@ -254,7 +225,7 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
       function wait(timeLeft) {
         if (timeLeft <= 0) {
           ret.recycleListenerServer.close();
-          return Promise.reject(new Error("waiting for app to live timed out"));
+          return Promise.reject(new Error('timeout while waiting for app to live'));
         }
 
         return rp("http://localhost:" + APP_PORT + "/alive").
@@ -316,21 +287,23 @@ function anyVersion(body) {
 }
 
 function getAppPage(app, path, expectedBody, timeout) {
-  return rp(app.baseUrl + path).then(function (body) {
-    var bodyString = body.toString().trim();
+  return rp(app.baseUrl + path)
+    .then(function (body) {
+      var bodyString = body.toString().trim();
 
-    if (_.isFunction(expectedBody) && !expectedBody(body) ||
-      !_.isFunction(expectedBody) && bodyString !== expectedBody) {
-      if (timeout <= 0)
-        return _.isFunction(expectedBody) ? expectedBody(bodyString) : bodyString;
+      if (_.isFunction(expectedBody) && !expectedBody(body) ||
+        !_.isFunction(expectedBody) && bodyString !== expectedBody) {
+        if (timeout <= 0)
+          return _.isFunction(expectedBody) ? expectedBody(bodyString) : bodyString;
+        else
+          return Promise.delay(200).then(function () {
+            return getAppPage(app, path, expectedBody, timeout - 200);
+          });
+      }
       else
-        return Promise.delay(200).then(function () {
-          return getAppPage(app, path, expectedBody, timeout - 200);
-        });
+        return _.isFunction(expectedBody) ? expectedBody(body) : body;
     }
-    else
-      return _.isFunction(expectedBody) ? expectedBody(body) : body;
-  });
+  );
 }
 
 function switchAppVersion(app, newVersion) {

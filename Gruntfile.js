@@ -1,22 +1,20 @@
 module.exports = function (grunt) {
-  grunt.loadNpmTasks('grunt-exec');
+
+  require('load-grunt-tasks')(grunt, {config: require('./package.json')});
 
   grunt.initConfig({
     pkg: grunt.file.readJSON('package.json'),
-    exec: {
+    mochaTest: {
       test: {
-        cmd: 'node_modules/.bin/jasmine ' + (grunt.option('spec') || '')
-      },
-      debugtest: {
-        cmd: 'node --debug-brk node_modules/.bin/jasmine ' + (grunt.option('spec') || '')
-      },
-      debugger: {
-        cmd: 'node-inspector'
+        options: {
+          reporter: 'spec',
+          clearRequireCache: true
+        },
+        src: ['tests/**/*-spec.js']
       }
     }
   });
 
   grunt.registerTask('default', ['test']);
-
-  grunt.registerTask('test', ['exec:test']);
+  grunt.registerTask('test', ['mochaTest:test']);
 };
