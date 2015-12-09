@@ -9,16 +9,13 @@ function run(version, switchVersionIfNeeded) {
         console.error(err);
         res.writeHead(500);
         res.end("switch callback failed: " + err);
-      }
-
-      if (req.url == '/alive') {
+      } else if (req.url == '/alive') {
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.end('alive');
       } else if (req.url == '/version') {
         res.writeHead(200, {'Content-Type': 'application/json'});
-        res.end(JSON.stringify({version: version}))
-      }
-      else {
+        res.end(JSON.stringify({version: version}));
+      } else {
         res.writeHead(404);
         res.end("unknown path")
       }
@@ -34,6 +31,11 @@ function fetchExpectedVersion(callback) {
     if (err)
       callback(err);
 
-    callback(null, content.toString())
+    var ver = content.toString();
+    if (ver === '') { // this is to recover from reading an empty string while another process writes to the file
+      fetchExpectedVersion(callback);
+    } else {
+      callback(null, content.toString());
+    }
   });
 }

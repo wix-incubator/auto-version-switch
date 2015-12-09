@@ -1,9 +1,8 @@
 var child_process = require('child_process');
-var rp = require('request-promise');
+var fetch = require('node-fetch');
 var Promise = require('Bluebird');
 var fs = require('fs');
 var os = require('os');
-var net = require('net');
 var crypto = require('crypto');
 var _ = require('lodash');
 var chai = require('chai');
@@ -38,26 +37,41 @@ describe("auto-version-switch", function () {
       });
   });
 
-  it.skip("survives a bombardment of requests when switching, and without any http errors", function () {
+  // todo: occasionally a request will timeout on the worker running the old version right before the new version worker takes its place - not sure how this can be fixed.
+  it("survives a bombardment of requests while switching versions, and (mostly) without http errors", function () {
+    var timeoutCount = 0;
     var app;
-    var MAGNITUDE_OF_BOMBARDMENTS = 100;
+    var MAGNITUDE_OF_BOMBARDMENTS = 1000; // a relatively high number is required to ensure the second worker actually gets requests
 
-    return runAppAndWait('./tests/test-apps/app-which-switches', '1.0').
+    return runAppAndWait('./tests/test-apps/app-which-switches', '1.0', 'version.txt', 3000).
       then(function (runningApp) {
         app = runningApp;
-      }).
-      then(function () {
-        return switchAppVersion(app, "2.2");
-      }).
-      then(function () {
-        return Promise.all(_.range(0, MAGNITUDE_OF_BOMBARDMENTS).map(function () {
-          return getAppPage(app, "/version", anyVersion, 0);
-        }));
-      }).
-      then(function (versions) {
+      })
+      .then(function () {
+        return switchAppVersion(app, '2.2');
+      })
+      .then(function () {
+        return Promise.all(
+          _.range(0, MAGNITUDE_OF_BOMBARDMENTS)
+            .map(function () {
+              return getAppPage(app, "/version", anyVersion, 5000)
+                .catch(function (maybeTimeout) {
+                  // This is designed to handle the case of request timeout which happens occasionally when the old version worker
+                  // is replaced by the new one...
+                  if (timeoutCount === 0 && maybeTimeout.message && maybeTimeout.message.startsWith('network timeout')) {
+                    timeoutCount++;
+                    return getAppPage(app, "/version", anyVersion, 5000);
+                  } else {
+                    return Promise.reject(maybeTimeout);
+                  }
+                });
+            })
+        );
+      })
+      .then(function (versions) {
         expect(["1.0", "2.2"]).to.include.members(versions);
         expect(versions.length).to.be.equal(MAGNITUDE_OF_BOMBARDMENTS);
-      });
+      }, fail())
   });
 
   it("should run the demo correctly", function () {
@@ -66,7 +80,7 @@ describe("auto-version-switch", function () {
       then(function (runningApp) {
         app = runningApp;
 
-        return getAppPage(app, "/", "Hello, world v1", 0);
+        return getAppPage(app, "/", "Hello, world v1", 2000);
       }).
       then(function (body) {
         expect(body).to.be.equal("Hello, world v1");
@@ -81,34 +95,31 @@ describe("auto-version-switch", function () {
       });
   });
 
-  it("should fail nicely when runner throws an exception", function (done) {
+  it("should fail nicely when runner throws an exception", function () {
     return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 0).
       then(function (runningApp) {
         return waitForDead(runningApp, 2000)
           .then(function (isKilled) {
             expect(isKilled).to.be.true;
-            done();
-          }, fail(done));
+          }, fail());
       });
   });
 
-  it("should fail nicely when first call to fetchExpectedVersion callbacks an error", function (done) {
+  it("should fail nicely when first call to fetchExpectedVersion callbacks an error", function () {
     return runAppAndWait('./tests/test-apps/fetchExpectedVersion-throws-exception.js', 'v1', undefined, 0).
       then(function (runningApp) {
         return waitForDead(runningApp, 2000).then(function (isKilled) {
           expect(isKilled).to.be.true;
-          done();
-        }, fail(done));
+        }, fail());
       });
   });
 
 });
 
-function fail(done) {
+function fail() {
   return function (err) {
     console.error('TEST ERROR:', err, err && err.stack ? err.stack : '');
     expect(err).to.be.undefined;
-    done();
   }
 }
 
@@ -150,8 +161,15 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout) {
           return Promise.reject(new Error('timeout while waiting for app to live'));
         }
 
-        return rp("http://localhost:" + APP_PORT + "/alive").
-          catch(function () {
+        return fetch("http://localhost:" + APP_PORT + "/alive")
+          .then(function (res) {
+            if (res.status === 200) {
+              console.log('App is alive on port ' + APP_PORT);
+            } else {
+              throw new Error('alive check got status: ' + res.status);
+            }
+          })
+          .catch(function () {
             return Promise.delay(200).
               then(function () {
                 return wait(timeLeft - 200);
@@ -192,7 +210,10 @@ function anyVersion(body) {
 }
 
 function getAppPage(app, path, expectedBody, timeout) {
-  return rp(app.baseUrl + path)
+  return fetch(app.baseUrl + path, {timeout: 10000})
+    .then(function (res) {
+      return res.text();
+    })
     .then(function (body) {
       var bodyString = body.toString().trim();
 
@@ -201,9 +222,10 @@ function getAppPage(app, path, expectedBody, timeout) {
         if (timeout <= 0)
           return _.isFunction(expectedBody) ? expectedBody(bodyString) : bodyString;
         else
-          return Promise.delay(200).then(function () {
-            return getAppPage(app, path, expectedBody, timeout - 200);
-          });
+          return Promise.delay(200)
+            .then(function () {
+              return getAppPage(app, path, expectedBody, timeout - 200);
+            });
       }
       else
         return _.isFunction(expectedBody) ? expectedBody(body) : body;
