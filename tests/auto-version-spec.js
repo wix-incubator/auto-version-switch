@@ -102,73 +102,6 @@ describe("auto-version-switch", function () {
       });
   });
 
-  describe("iisnode mode", function () {
-    var app;
-
-    afterEach(function (done) {
-      if (app) {
-        app.recycleListenerServer.close(done);
-        app = null;
-      }
-      else
-        done();
-    });
-
-    it("should switch an app when option.iisNodeMode is true", function () {
-      return runAppAndWait('./tests/test-apps/app-which-switches-iisnode-mode', '1.0', undefined, undefined, true, false).
-        then(function (runningApp) {
-          app = runningApp;
-        }).
-        then(function () {
-          return getAppPage(app, "/version", expectedVersion("1.0"), 0);
-        }).
-        then(function (version) {
-          expect(version).to.be.equal("1.0");
-
-          return switchAppVersion(app, "2.1");
-        }).
-        then(function () {
-          return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
-        }).
-        then(function (version) {
-          expect(app.hasRecycledApp).to.be.true;
-          expect(version).to.be.equal("2.1");
-        });
-    });
-
-    it("should switch an app when environment variable for iisnode mode is true", function () {
-      return runAppAndWait('./tests/test-apps/app-which-switches', '1.0', undefined, undefined, true, true).
-        then(function (runningApp) {
-          app = runningApp;
-        }).
-        then(function () {
-          return getAppPage(app, "/version", expectedVersion("1.0"), 0);
-        }).
-        then(function (version) {
-          expect(version).to.be.equal("1.0");
-
-          return switchAppVersion(app, "2.1");
-        }).
-        then(function () {
-          return getAppPage(app, "/version", expectedVersion("2.1"), 2000);
-        }).
-        then(function (version) {
-          expect(app.hasRecycledApp).to.be.true;
-          expect(version).to.be.equal("2.1");
-        });
-    });
-
-    it("should fail nicely when runner throws an exception", function (done) {
-      return runAppAndWait('./tests/test-apps/run-throws-exception.js', 'v1', undefined, 0, true, true)
-        .then(function (runningApp) {
-          return waitForDead(runningApp, 2000)
-            .then(function (isKilled) {
-              expect(isKilled).to.be.true;
-              done();
-            }, fail(done));
-        });
-    });
-  })
 });
 
 function fail(done) {
@@ -182,7 +115,7 @@ function fail(done) {
 var APP_PORT = 8765;
 var SHOOT_TO_KILL_MARKER = "ZOMBIES_AHOY_SHOOT_TO_KILL";
 
-function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, supportIisNodeMode, useIisNodeEnvironmentVariable) {
+function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout) {
   var filename = versionFile || os.tmpdir() + '/auto-version-switch-' + crypto.randomBytes(4).readUInt32LE(0);
   fs.writeFileSync(filename, firstVersion);
 
@@ -192,7 +125,6 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
         app: undefined,
         baseUrl: "http://localhost:" + APP_PORT,
         versionFileName: filename,
-        recycleListenerServer: undefined,
         hasRecycledApp: false
       };
 
@@ -202,19 +134,10 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
             env: {
               DEBUG: "debug:*",
               PORT: APP_PORT,
-              VERSION_FILE: filename,
-              IISNODE_CONTROL_PIPE: supportIisNodeMode ? 9673 : 0,
-              AUTO_VERSION_SWITCH_IISNODE_MODE: useIisNodeEnvironmentVariable ? 'true' : 'false'
+              VERSION_FILE: filename
             }
           });
       }
-
-      ret.recycleListenerServer = supportIisNodeMode ?
-        setupMockOfIisNodeRecycleListenerSocket(9673, function () {
-          ret.app.kill();
-          ret.app = createApp();
-          ret.hasRecycledApp = true;
-        }) : null;
 
       ret.app = createApp();
       ret.app.on('exit', function () {
@@ -224,7 +147,6 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
 
       function wait(timeLeft) {
         if (timeLeft <= 0) {
-          ret.recycleListenerServer.close();
           return Promise.reject(new Error('timeout while waiting for app to live'));
         }
 
@@ -243,23 +165,6 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout, suppor
     });
 }
 
-function setupMockOfIisNodeRecycleListenerSocket(port, recycleChildProcessCallback) {
-  var server = net.createServer(function (socket) {
-    socket.on('data', function (data) {
-      if (data.toString() === 'recycle') {
-        recycleChildProcessCallback();
-      }
-      else {
-        console.error("received something other than 'recycle': ", data.toString());
-      }
-    })
-  });
-
-  server.listen(port);
-
-
-  return server;
-}
 
 function killZombieProcesses() {
   return Promise.promisify(child_process.exec)(

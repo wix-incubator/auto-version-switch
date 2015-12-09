@@ -4,10 +4,6 @@ This module enables you to automatically deploy a new version of a node app with
 It does this by forking the node app (using node's `cluster` module), checking the version, and reforking if necessary.
 This module ensures no loss of connectivity because it will run a new version of the app before killing the previous version.
 
-auto-version-switch also supports running under [IISNode](https://github.com/tjanczuk/iisnode).
-This special mode exists because a node app running under iisnode does not support clustering,
-and thus needs another mechanism to support version switching. See below for instructions on enabling iisnode.
-
 How do I enable it in my app?
 =============================
 Let's say you have a JavaScript file, `app.js`, that runs a web server:
@@ -98,7 +94,7 @@ The module is a single function, which accepts two functions (some would call th
 * `run(version, switchVersionIfNeededFunc, [options])`: a function that runs your application.
 * `fetchExpectedVersion(callback)`: a function that returns the version identifier that is expected to run.
 
-### `run(version, switchVersionIfNeededFunc, [options])`
+### `run(version, switchVersionIfNeededFunc)`
 This function, which you supply, should run the app. It accepts two parameters:
 * `version`. The version that should run.
 * `switchVersionIfNeededFunc(callback)`. Your app should call this function from time to time to check whether the version has changed.
@@ -109,9 +105,6 @@ This function, which you supply, should run the app. It accepts two parameters:
   request is being handled. If there was an error, the callback
   will be called with an error; otherwise, it will be called with undefined. Even if the function returned an
   error, you can continue with your app, because it may be a temporary failure.
-* `options`. An object of options. The options supported:
-  * `iisNodeMode`. If `true`, will assume it is running under iisNode and use the iisNode mechanism for auto-version-switching.  
-  An alternative to this option is to set the environment variable AUTO_VERSION_SWITCH_IISNODE_MODE to 'true'
 
 ### `fetchExpectedVersion(callback)`
 This function, which you supply, should call the callback with the expected version. This uses the standard node callback signature:
@@ -119,23 +112,3 @@ This function, which you supply, should call the callback with the expected vers
 that the version can be any primitive type (`string`, `int`, etc.), as it is compared using `!===` against version values
 returned by previous calls to this function.
 
-
-IISNode Mode
-============
-To enable IISNode mode, you need to enable recycle signalling in issnode by setting the `recycleSignaleEnabled` setting to true:
-```xml
-<configuration>
-  <system.webServer>
-    <iisnode recycleSignalEnabled="true" />
-    <handlers>
-      <add name="iisnode" path="server.js" verb="*" modules="iisnode" />
-    </handlers>
-  </system.webServer>
-</configuration>
-````
-
-Then, in your code, use the regular code, but pass {iisNodeMode: true} in the options parameter:
- ```javascript
-require('auto-version-switch')(run, fetchExpectedVersion, {iisNodeMode: true});
-...
-```

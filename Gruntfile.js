@@ -12,9 +12,13 @@ module.exports = function (grunt) {
         },
         src: ['tests/**/*-spec.js']
       }
+    },
+    eslint: {
+      target: ['index.js', 'lib/**/*.js']
     }
   });
 
   grunt.registerTask('default', ['test']);
-  grunt.registerTask('test', ['mochaTest:test']);
+  grunt.registerTask('test', ['lint', 'mochaTest:test']);
+  grunt.registerTask('lint', ['eslint']);
 };
