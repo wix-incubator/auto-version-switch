@@ -1,6 +1,6 @@
 {
   "name": "auto-version-switch",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Automatically switch between different versions of same app",
   "main": "index.js",
   "scripts": {
