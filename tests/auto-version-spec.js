@@ -143,7 +143,7 @@ function runAppAndWait(appModule, firstVersion, versionFile, waitTimeout) {
         return child_process.fork(appModule, [SHOOT_TO_KILL_MARKER],
           {
             env: {
-              DEBUG: "debug:*",
+              DEBUG: "*",
               PORT: APP_PORT,
               VERSION_FILE: filename
             }

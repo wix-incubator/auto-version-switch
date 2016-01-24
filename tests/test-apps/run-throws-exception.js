@@ -1,7 +1,9 @@
 require('../../lib/auto-version-switch')(run, fetchExpectedVersion);
 
 function run() {
-  throw new Error("I told you I'd throw");
+  setTimeout(function() {
+    throw new Error("I told you I'd throw")
+  }, 100);
 }
 
 function fetchExpectedVersion(callback) {
